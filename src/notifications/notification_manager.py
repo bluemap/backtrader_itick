@@ -348,13 +348,24 @@ class WeChatNotifier(NotificationProvider):
             
             response.raise_for_status()
             
-            result = response.json()
-            if result.get('errcode') == 0:
-                self.logger.debug("企业微信消息发送成功")
-                return True
-            else:
-                self.logger.error(f"企业微信消息发送失败: {result}")
-                return False
+            # 尝试解析JSON响应
+            try:
+                result = response.json()
+                # 企业微信API成功响应: {"errcode": 0, "errmsg": "ok"}
+                if result.get('errcode') == 0 or result.get('errmsg') == 'ok':
+                    self.logger.debug(f"企业微信消息发送成功: {result}")
+                    return True
+                else:
+                    self.logger.error(f"企业微信消息发送失败: {result}")
+                    return False
+            except ValueError:
+                # 如果无法解析JSON，但HTTP状态码正常，认为发送成功
+                if response.status_code == 200:
+                    self.logger.debug(f"企业微信消息发送成功 (HTTP {response.status_code})")
+                    return True
+                else:
+                    self.logger.error(f"企业微信消息发送失败 (HTTP {response.status_code})")
+                    return False
         
         except Exception as e:
             self.logger.error(f"企业微信消息发送异常: {e}")
