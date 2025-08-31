@@ -86,7 +86,7 @@ class ItickDataProvider:
     
     def _get_ktype_from_timeframe(self, timeframe: str) -> int:
         """
-        将时间周期转换为iTick的kType格式
+        将时间周期转换为iTick的kType格式（根据官方文档）
         
         Args:
             timeframe: 时间周期 (1m, 5m, 15m, 30m, 1h, 1d)
@@ -100,7 +100,11 @@ class ItickDataProvider:
             '15m': 3,   # 15分钟
             '30m': 4,   # 30分钟
             '1h': 5,    # 1小时
-            '1d': 6     # 1日
+            '2h': 6,    # 2小时
+            '4h': 7,    # 4小时
+            '1d': 8,    # 1天
+            '1w': 9,    # 1周
+            '1M': 10    # 1月
         }
         return timeframe_map.get(timeframe, 2)  # 默认5分钟
     
@@ -170,12 +174,22 @@ class ItickDataProvider:
             self.logger.error("API Key 未设置")
             return []
         
-        # 构建请求参数 - 使用官方API格式
+        # 等待API限流
+        self._wait_for_rate_limit()
+        
+        # 计算et参数（查询截止时间）- 使用毫秒级时间戳
+        if end_date:
+            et_timestamp = int(end_date.timestamp() * 1000)
+        else:
+            et_timestamp = int(datetime.now().timestamp() * 1000)
+        
+        # 构建请求参数 - 根据官方API文档格式
         params = {
             'region': 'US',  # 美股，港股用HK
             'code': symbol,
             'kType': self._get_ktype_from_timeframe(timeframe),
-            'limit': limit
+            'et': str(et_timestamp),  # 查询截止时间（必需参数）
+            'limit': str(limit)
         }
         
         headers = {
@@ -186,29 +200,43 @@ class ItickDataProvider:
         try:
             # 使用官方K线 API
             url = f"{self.base_url}/stock/kline"
+            
+            self.logger.info(f"请求iTick K线数据: {url}")
+            self.logger.info(f"请求参数: {params}")
+            
             response = requests.get(url, params=params, headers=headers, timeout=self.timeout, verify=False)
             response.raise_for_status()
             
             data = response.json()
+            self.logger.info(f"API响应: {data}")
             
-            # 解析数据
+            # 解析数据 - 根据官方文档的响应格式
             klines = []
-            if data.get('code') == 0 and 'data' in data:
-                for item in data['data']:
-                    # 根据实际返回格式解析（可能需要调整）
-                    kline = KlineData(
-                        symbol=symbol,
-                        timestamp=datetime.fromtimestamp(item.get('t', 0) / 1000),  # 时间戳
-                        open=float(item.get('o', 0)),   # 开盘价
-                        high=float(item.get('h', 0)),   # 最高价
-                        low=float(item.get('l', 0)),    # 最低价
-                        close=float(item.get('c', 0)),  # 收盘价
-                        volume=int(item.get('v', 0)),   # 成交量
-                        timeframe=timeframe
-                    )
-                    klines.append(kline)
+            if data.get('code') == 0 and data.get('data'):
+                raw_data = data['data']
+                self.logger.info(f"获取到 {len(raw_data)} 条原始K线数据")
+                
+                for item in raw_data:
+                    try:
+                        # 根据官方文档的响应格式解析
+                        kline = KlineData(
+                            symbol=symbol,
+                            timestamp=datetime.fromtimestamp(item['t'] / 1000),  # t: 时间戳
+                            open=float(item['o']),   # o: 开盘价
+                            high=float(item['h']),   # h: 最高价
+                            low=float(item['l']),    # l: 最低价
+                            close=float(item['c']),  # c: 收盘价
+                            volume=int(item['v']),   # v: 成交量
+                            timeframe=timeframe
+                        )
+                        klines.append(kline)
+                    except Exception as e:
+                        self.logger.warning(f"解析K线数据失败: {item}, 错误: {e}")
+                        continue
+            else:
+                self.logger.error(f"API返回错误: code={data.get('code')}, msg={data.get('msg')}")
             
-            self.logger.info(f"获取历史K线数据成功: {symbol}, {len(klines)} 条记录")
+            self.logger.info(f"✅ 成功获取 {len(klines)} 条真实历史K线数据: {symbol}")
             return klines
         
         except Exception as e:

@@ -24,6 +24,7 @@ from src.notifications.notification_manager import NotificationManager
 from src.utils.monitoring import MonitoringSystem
 from src.strategies.strategy_factory import StrategyFactory, create_strategy_from_config
 from src.strategies.base_strategy import TradeSignal
+from src.backtesting.backtest_manager import BacktestManager
 
 
 class QuantTradingSystem:
@@ -47,6 +48,7 @@ class QuantTradingSystem:
         self.signal_generator = None
         self.notification_manager = None
         self.monitoring_system = None
+        self.backtest_manager = None
         
         # 运行状态
         self.is_running = False
@@ -94,7 +96,7 @@ class QuantTradingSystem:
                 self.data_provider = ItickDataProvider(self.config_manager)
                 self.data_storage = DataStorage(self.config_manager)
             else:
-                # 使用限流提供者适应免费账户
+                # 使用限流提供者适应免费账户，但保留iTick提供者用于回测
                 self.data_provider = RateLimitedProvider(self.config_manager)
                 from src.data.itick_provider import DataStorage
                 self.data_storage = DataStorage(self.config_manager)
@@ -104,6 +106,9 @@ class QuantTradingSystem:
             
             # 初始化通知管理器
             self.notification_manager = NotificationManager(self.config_manager)
+            
+            # 初始化回测管理器
+            self.backtest_manager = BacktestManager(self.config_manager, self.data_provider)
             
             # 设置信号回调
             self.signal_generator.add_signal_callback(self._on_trading_signal)
@@ -374,14 +379,15 @@ class QuantTradingSystem:
         except Exception as e:
             self.logger.error(f"处理健康状态变化失败: {e}")
     
-    def run_backtest(self, start_date: str = None, end_date: str = None, 
-                    initial_cash: float = 100000) -> Dict[str, Any]:
+    def run_backtest(self, symbol: str = None, strategy: str = None,
+                    days: int = 30, initial_cash: float = 100000) -> Dict[str, Any]:
         """
         运行回测
         
         Args:
-            start_date: 开始日期 (YYYY-MM-DD)
-            end_date: 结束日期 (YYYY-MM-DD)
+            symbol: 股票代码（为None则使用股票池）
+            strategy: 策略名称（为None则使用配置中的策略）
+            days: 回测天数
             initial_cash: 初始资金
             
         Returns:
@@ -390,35 +396,190 @@ class QuantTradingSystem:
         try:
             self.logger.info("开始运行回测...")
             
-            # 获取股票池
-            stock_symbols = self.stock_pool_manager.get_valid_stocks()
-            if not stock_symbols:
-                raise ValueError("股票池为空")
+            # 确定股票池
+            if symbol:
+                symbols = [symbol]
+            else:
+                symbols = self.stock_pool_manager.get_valid_stocks()
+                if not symbols:
+                    raise ValueError("股票池为空")
             
-            # 创建策略
-            strategy = create_strategy_from_config(self.config_manager)
+            # 确定策略
             if not strategy:
-                raise ValueError("策略创建失败")
+                strategy = self.config_manager.get_strategy_config().type
             
-            # 运行回测（简化实现）
-            # 实际应用中需要加载历史数据并运行完整的回测
+            # 获取策略参数
+            strategy_config = self.config_manager.get_strategy_config()
+            strategy_params = {}
             
-            backtest_results = {
-                'start_date': start_date,
-                'end_date': end_date,
-                'initial_cash': initial_cash,
-                'strategy': self.config_manager.get_strategy_config().type,
-                'symbols': stock_symbols,
-                'status': 'completed',
-                'message': '回测功能需要完整的历史数据实现'
-            }
+            if strategy == "MA_Crossover" and strategy_config.ma_crossover:
+                strategy_params.update(strategy_config.ma_crossover)
+            elif strategy == "RSI_Strategy" and strategy_config.rsi_strategy:
+                strategy_params.update(strategy_config.rsi_strategy)
+            elif strategy == "BollingerBands" and strategy_config.bollinger_bands:
+                strategy_params.update(strategy_config.bollinger_bands)
+            elif strategy == "Momentum" and strategy_config.momentum:
+                strategy_params.update(strategy_config.momentum)
             
-            self.logger.info("回测完成")
-            return backtest_results
+            # 添加风险控制参数
+            risk_config = self.config_manager.get_risk_control_config()
+            strategy_params.update({
+                'stop_loss_pct': risk_config.default_stop_loss,
+                'take_profit_pct': risk_config.default_take_profit
+            })
+            
+            # 执行回测
+            if len(symbols) == 1:
+                # 单股回测
+                result = self.backtest_manager.run_strategy_backtest(
+                    symbol=symbols[0],
+                    strategy_name=strategy,
+                    days=days,
+                    initial_cash=initial_cash,
+                    **strategy_params
+                )
+                
+                if result:
+                    result.print_summary()
+                    return result.to_dict()
+                else:
+                    return {'status': 'failed', 'message': '回测执行失败'}
+            
+            else:
+                # 多股回测
+                results = self.backtest_manager.run_multi_symbol_backtest(
+                    symbols=symbols,
+                    strategy_name=strategy,
+                    days=days,
+                    initial_cash=initial_cash,
+                    **strategy_params
+                )
+                
+                if results:
+                    print(f"\n多股回测结果 ({len(results)}只股票):")
+                    print("=" * 60)
+                    
+                    # 按收益率排序
+                    sorted_results = sorted(results, key=lambda x: x.total_return_pct, reverse=True)
+                    
+                    for i, result in enumerate(sorted_results, 1):
+                        print(f"{i:2d}. {result.symbol}: {result.total_return_pct:+6.2f}% "
+                              f"(胜率: {result.win_rate:.1f}%, 交易: {result.total_trades}次)")
+                    
+                    # 返回统计结果
+                    avg_return = sum(r.total_return_pct for r in results) / len(results)
+                    profitable_count = sum(1 for r in results if r.total_return_pct > 0)
+                    
+                    return {
+                        'status': 'success',
+                        'strategy': strategy,
+                        'symbols_count': len(results),
+                        'avg_return_pct': avg_return,
+                        'profitable_count': profitable_count,
+                        'profitable_rate': profitable_count / len(results) * 100,
+                        'individual_results': [r.to_dict() for r in results]
+                    }
+                else:
+                    return {'status': 'failed', 'message': '多股回测执行失败'}
         
         except Exception as e:
-            self.logger.error(f"回测失败: {e}")
-            return {'status': 'failed', 'error': str(e)}
+            self.logger.error(f"回测运行失败: {e}")
+            return {
+                'status': 'error',
+                'message': str(e)
+            }
+    
+    def run_strategy_comparison(self, symbol: str = None, days: int = 30, 
+                              initial_cash: float = 100000) -> Dict[str, Any]:
+        """
+        运行多策略对比回测
+        
+        Args:
+            symbol: 股票代码（为None则使用第一只股票）
+            days: 回测天数
+            initial_cash: 初始资金
+            
+        Returns:
+            Dict[str, Any]: 对比结果
+        """
+        try:
+            if not symbol:
+                symbols = self.stock_pool_manager.get_valid_stocks()
+                if not symbols:
+                    raise ValueError("股票池为空")
+                symbol = symbols[0]
+            
+            # 定义要对比的策略
+            strategies = [
+                {'name': 'MA_Crossover', 'params': {'short_window': 10, 'long_window': 50}},
+                {'name': 'RSI_Strategy', 'params': {'period': 14, 'oversold': 30, 'overbought': 70}},
+                {'name': 'BollingerBands', 'params': {'period': 20, 'std_dev': 2}},
+                {'name': 'Momentum', 'params': {'period': 10, 'threshold': 0.02}}
+            ]
+            
+            results = self.backtest_manager.run_multi_strategy_backtest(
+                symbol=symbol,
+                strategies=strategies,
+                days=days,
+                initial_cash=initial_cash
+            )
+            
+            if results:
+                print(f"\n策略对比结果 - {symbol}:")
+                print("=" * 80)
+                print(f"{'\u7b56\u7565\u540d\u79f0':>15} {'\u6536\u76ca\u7387':>8} {'\u80dc\u7387':>6} {'\u4ea4\u6613\u6b21\u6570':>6} {'\u590f\u666e\u6bd4\u7387':>8} {'\u6700\u5927\u56de\u64a4':>8}")
+                print("-" * 80)
+                
+                # 按收益率排序
+                sorted_results = sorted(results, key=lambda x: x.total_return_pct, reverse=True)
+                
+                for result in sorted_results:
+                    sharpe = f"{result.sharpe_ratio:.3f}" if result.sharpe_ratio else "N/A"
+                    print(f"{result.strategy:>15} {result.total_return_pct:>+7.2f}% "
+                          f"{result.win_rate:>5.1f}% {result.total_trades:>6} {sharpe:>8} "
+                          f"{result.max_drawdown_pct:>7.2f}%")
+                
+                return {
+                    'status': 'success',
+                    'symbol': symbol,
+                    'strategies_count': len(results),
+                    'best_strategy': sorted_results[0].strategy if results else None,
+                    'best_return': sorted_results[0].total_return_pct if results else 0,
+                    'results': [r.to_dict() for r in results]
+                }
+            else:
+                return {'status': 'failed', 'message': '策略对比失败'}
+        
+        except Exception as e:
+            self.logger.error(f"策略对比失败: {e}")
+            return {'status': 'error', 'message': str(e)}
+    
+    def quick_backtest(self, symbol: str, strategy: str = "MA_Crossover") -> None:
+        """
+        快速回测（用于简单测试）
+        
+        Args:
+            symbol: 股票代码
+            strategy: 策略名称
+        """
+        print(f"\n开始快速回测: {symbol} - {strategy}")
+        print("=" * 50)
+        
+        result = self.run_backtest(symbol=symbol, strategy=strategy, days=30)
+        
+        if result.get('status') == 'success':
+            basic_info = result.get('basic_info', {})
+            final_result = result.get('final_result', {})
+            trade_stats = result.get('trade_statistics', {})
+            
+            print(f"股票: {basic_info.get('symbol', symbol)}")
+            print(f"策略: {basic_info.get('strategy', strategy)}")
+            print(f"回测期间: {basic_info.get('start_date')} ~ {basic_info.get('end_date')}")
+            print(f"总收益率: {final_result.get('total_return_pct', 'N/A')}")
+            print(f"交易次数: {trade_stats.get('total_trades', 0)}")
+            print(f"胜率: {trade_stats.get('win_rate', 'N/A')}")
+        else:
+            print(f"回测失败: {result.get('message', '未知错误')}")
     
     def get_system_status(self) -> Dict[str, Any]:
         """获取系统状态"""

@@ -49,6 +49,54 @@ class SimpleSignalGenerator:
         """添加信号回调函数"""
         self.signal_callbacks.append(callback)
     
+    def generate_signals(self, data: pd.DataFrame) -> List[TradeSignal]:
+        """
+        为回测生成信号列表
+        
+        Args:
+            data: 历史价格数据 (OHLCV)
+            
+        Returns:
+            List[TradeSignal]: 信号列表
+        """
+        signals = []
+        
+        # 需要足够的数据点来计算技术指标
+        min_periods = max(self.short_window, self.long_window, self.rsi_period, self.bb_period)
+        if len(data) < min_periods:
+            return signals
+        
+        # 从最小周期开始逐步生成信号
+        for i in range(min_periods, len(data)):
+            try:
+                # 获取到当前时间点的数据
+                current_data = data.iloc[:i+1].copy()
+                current_price = current_data['close'].iloc[-1]
+                current_time = current_data.index[-1]
+                
+                if hasattr(current_time, 'to_pydatetime'):
+                    current_time = current_time.to_pydatetime()
+                
+                signal = None
+                
+                if self.strategy_type == "MA_Crossover":
+                    signal = self._ma_crossover_signal("BACKTEST", current_data, current_price, current_time)
+                elif self.strategy_type == "RSI_Strategy":
+                    signal = self._rsi_signal("BACKTEST", current_data, current_price, current_time)
+                elif self.strategy_type == "BollingerBands":
+                    signal = self._bollinger_signal("BACKTEST", current_data, current_price, current_time)
+                elif self.strategy_type == "Momentum":
+                    signal = self._momentum_signal("BACKTEST", current_data, current_price, current_time)
+                
+                if signal:
+                    signals.append(signal)
+                    
+            except Exception as e:
+                self.logger.warning(f"在第{i}个数据点生成信号失败: {e}")
+                continue
+        
+        return signals
+    
     def process_data(self, symbol: str, data: pd.DataFrame) -> None:
         """
         处理数据并生成信号
