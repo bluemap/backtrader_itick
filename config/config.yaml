@@ -1,0 +1,129 @@
+# 港美股量化交易通知系统配置文件
+
+# iTick API 配置
+itick:
+  api_key: "70b52ae52b23474a8da516ea4215b47e063419e5ed694a6b9ea6ab6cff85b7d2"  # 请替换为实际的 iTick API Key
+  base_url: "https://api.itick.org"    # 修正：官方使用 .org 而不是 .com
+  websocket_url: "wss://api.itick.org/stock"  # 修正：官方WebSocket URL
+  timeout: 30
+  # 模拟模式配置（用于测试）
+  simulation_mode: false  # 关闭模拟模式，使用真实iTick数据
+  # API限制配置（免费账户）
+  rate_limit:
+    requests_per_minute: 5  # 每分钟最大请求数
+    enable_rate_limiting: true  # 启用限流控制
+
+# 股票池配置
+stock_pool:
+  # 默认股票列表
+  symbols:
+    - AAPL
+    - MSFT
+    - GOOGL
+  # CSV 文件路径（可选）
+  csv_file: null
+  # 是否去重
+  deduplicate: true
+  # 是否验证股票有效性
+  validate: true
+
+# 策略配置
+strategy:
+  # 策略类型: MA_Crossover, RSI_Strategy, BollingerBands, Breakout, Momentum
+  type: "MA_Crossover"
+  
+  # 均线交叉策略参数
+  ma_crossover:
+    short_window: 10
+    long_window: 50
+    
+  # RSI 策略参数
+  rsi_strategy:
+    period: 14
+    oversold: 30
+    overbought: 70
+    
+  # 布林带策略参数
+  bollinger_bands:
+    period: 20
+    std_dev: 2
+    
+  # 突破策略参数
+  breakout:
+    period: 20
+    
+  # 动量策略参数
+  momentum:
+    period: 10
+    threshold: 0.02
+
+# 数据配置
+data:
+  # 历史数据存储目录
+  historical_dir: "data/historical"
+  # 数据格式: csv, sqlite, parquet
+  format: "csv"
+  # 数据更新间隔（秒）- 调整为5分钟适应API限制
+  update_interval: 300
+  # K线周期: 1m, 5m, 15m, 30m, 1h, 1d - 使用5分钟减少API调用
+  timeframe: "5m"
+
+# 通知配置
+notification:
+  enabled: true
+  
+  # 飞书机器人配置
+  feishu:
+    enabled: false
+    webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/your_webhook_token"
+    
+  # 微信通知配置  
+  wechat:
+    enabled: true
+    # 企业微信机器人
+    webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=724a9707-f23c-4844-a2dd-6a83ead40f51"
+    # 或使用 Server 酱
+    server_chan_key: null
+    
+  # 推送频率控制
+  frequency:
+    # 推送模式: immediate, batch
+    mode: "immediate"
+    # 批量推送间隔（分钟）
+    batch_interval: 5
+    
+  # 消息模板
+  message_template:
+    include_stop_loss: true
+    include_take_profit: true
+    include_strategy_name: true
+
+# 日志配置
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_dir: "logs"
+  max_file_size: "10MB"
+  backup_count: 5
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# 监控配置
+monitoring:
+  # 是否启用监控
+  enabled: true
+  # 错误重试次数
+  max_retries: 3
+  # 重试间隔（秒）
+  retry_interval: 60
+  # 健康检查间隔（秒）
+  health_check_interval: 300
+
+# 风险控制配置
+risk_control:
+  # 每日最大交易信号数
+  max_signals_per_day: 100
+  # 单个股票最大持仓比例
+  max_position_per_stock: 0.1
+  # 止损百分比
+  default_stop_loss: 0.05
+  # 止盈百分比
+  default_take_profit: 0.10

@@ -1,0 +1,69 @@
+# 港美股量化交易通知系统依赖包
+
+# 核心框架
+backtrader>=1.9.78.123
+pandas>=1.5.0
+numpy>=1.21.0
+
+# 数据处理和分析
+scipy>=1.9.0
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# 网络请求和WebSocket
+requests>=2.28.0
+websocket-client>=1.4.0
+urllib3>=1.26.0
+
+# 配置文件处理
+PyYAML>=6.0
+
+# 命令行工具
+click>=8.1.0
+
+# 系统监控
+psutil>=5.9.0
+
+# 日志处理
+colorlog>=6.7.0
+
+# 数据存储
+# SQLite 是Python内置的，无需额外安装
+# 如果需要其他数据库支持，可以添加：
+# sqlalchemy>=1.4.0
+# pymysql>=1.0.0
+# psycopg2>=2.9.0
+
+# 数据格式
+# CSV 是pandas内置支持的
+# 如果需要Parquet支持：
+pyarrow>=9.0.0
+
+# 时间处理
+python-dateutil>=2.8.0
+
+# 加密和安全
+cryptography>=3.4.0
+
+# 开发和测试工具（可选）
+pytest>=7.0.0
+pytest-cov>=4.0.0
+flake8>=5.0.0
+black>=22.0.0
+
+# 数据可视化（可选）
+plotly>=5.10.0
+
+# Jupyter支持（可选，用于策略开发和分析）
+jupyter>=1.0.0
+ipykernel>=6.15.0
+
+# 性能优化（可选）
+numba>=0.56.0
+cython>=0.29.0
+
+# API限流（可选）
+ratelimit>=2.2.0
+
+# 更好的日期时间处理（可选）
+pendulum>=2.1.0
