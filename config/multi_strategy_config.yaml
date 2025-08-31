@@ -1,0 +1,238 @@
+# 多策略量化交易系统配置文件
+
+# iTick API 配置
+itick:
+  api_key: "70b52ae52b23474a8da516ea4215b47e063419e5ed694a6b9ea6ab6cff85b7d2"
+  base_url: "https://api.itick.org"
+  websocket_url: "wss://api.itick.org/stock"
+  timeout: 30
+  simulation_mode: false
+  rate_limit:
+    requests_per_minute: 5
+    enable_rate_limiting: true
+
+# 全局股票池配置（可被策略覆盖）
+global_stock_pool:
+  symbols:
+    - AAPL
+    - MSFT
+    - GOOGL
+    - NVDA
+    - TSLA
+  csv_file: null
+  deduplicate: true
+  validate: true
+
+# 多策略配置
+strategies:
+  # 策略1：布林带策略
+  - name: "bollinger_aapl_msft"
+    enabled: true
+    type: "BollingerBands"
+    
+    # 策略特定的股票池（可选，如不指定则使用全局股票池）
+    stock_pool:
+      symbols:
+        - AAPL
+        - MSFT
+    
+    # 资金分配
+    capital_allocation:
+      percentage: 40  # 占总资金的40%
+      max_amount: 50000  # 最大投入金额
+    
+    # 策略参数
+    parameters:
+      bollinger_bands:
+        period: 20
+        std_dev: 2
+        stop_loss_pct: 0.03
+        take_profit_pct: 0.08
+    
+    # 风险控制
+    risk_control:
+      max_signals_per_day: 10
+      max_position_per_stock: 0.15
+      
+    # 通知设置
+    notification:
+      enabled: true
+      prefix: "[布林带]"
+  
+  # 策略2：RSI策略
+  - name: "rsi_tech_stocks"
+    enabled: true
+    type: "RSI_Strategy"
+    
+    stock_pool:
+      symbols:
+        - GOOGL
+        - NVDA
+        - TSLA
+    
+    capital_allocation:
+      percentage: 35
+      max_amount: 40000
+    
+    parameters:
+      rsi_strategy:
+        period: 14
+        oversold: 25
+        overbought: 75
+        stop_loss_pct: 0.04
+        take_profit_pct: 0.10
+    
+    risk_control:
+      max_signals_per_day: 8
+      max_position_per_stock: 0.20
+      
+    notification:
+      enabled: true
+      prefix: "[RSI]"
+  
+  # 策略3：MACD策略
+  - name: "macd_momentum"
+    enabled: true
+    type: "MACD_Crossover"
+    
+    stock_pool:
+      symbols:
+        - AAPL
+        - TSLA
+        - NVDA
+    
+    capital_allocation:
+      percentage: 25
+      max_amount: 30000
+    
+    parameters:
+      macd:
+        fast_period: 12
+        slow_period: 26
+        signal_period: 9
+        volume_filter: true
+        trend_filter: true
+        histogram_threshold: 0.001
+        stop_loss_pct: 0.05
+        take_profit_pct: 0.12
+    
+    risk_control:
+      max_signals_per_day: 6
+      max_position_per_stock: 0.25
+      
+    notification:
+      enabled: true
+      prefix: "[MACD]"
+
+# 策略管理配置
+strategy_management:
+  # 总资金
+  total_capital: 100000
+  
+  # 策略执行模式
+  execution_mode: "parallel"  # parallel: 并行执行, sequential: 顺序执行
+  
+  # 策略冲突处理
+  conflict_resolution:
+    # 同一股票多个策略信号冲突时的处理方式
+    # first_wins: 第一个信号优先
+    # highest_confidence: 最高置信度优先
+    # combine_signals: 组合信号
+    mode: "highest_confidence"
+    
+    # 信号合并权重（仅在combine_signals模式下生效）
+    signal_weights:
+      BollingerBands: 0.4
+      RSI_Strategy: 0.3
+      MACD_Crossover: 0.3
+  
+  # 策略重新平衡
+  rebalancing:
+    enabled: true
+    frequency: "daily"  # daily, weekly, monthly
+    time: "09:30"  # 重新平衡时间
+
+# 数据配置
+data:
+  historical_dir: "data/historical"
+  format: "csv"
+  update_interval: 1800  # 30分钟
+  timeframe: "30m"
+  
+  # 多策略数据缓存
+  cache:
+    enabled: true
+    max_cache_size: 1000  # 最大缓存K线数
+    cache_dir: "data/cache"
+
+# 通知配置
+notification:
+  enabled: true
+  
+  # 全局通知设置
+  global_settings:
+    # 汇总模式：是否将多个策略的信号汇总后发送
+    summary_mode: true
+    summary_interval: 300  # 5分钟汇总一次
+    
+    # 单独通知：每个策略单独发送通知
+    individual_notifications: true
+  
+  feishu:
+    enabled: false
+    webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/your_webhook_token"
+    
+  wechat:
+    enabled: true
+    webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=724a9707-f23c-4844-a2dd-6a83ead40f51"
+    
+  frequency:
+    mode: "immediate"
+    batch_interval: 5
+    
+  message_template:
+    include_stop_loss: true
+    include_take_profit: true
+    include_strategy_name: true
+    include_capital_allocation: true
+
+# 日志配置
+logging:
+  level: "INFO"
+  log_dir: "logs"
+  max_file_size: "10MB"
+  backup_count: 5
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # 策略特定日志
+  strategy_logs:
+    enabled: true
+    separate_files: true  # 每个策略单独日志文件
+
+# 监控配置
+monitoring:
+  enabled: true
+  max_retries: 3
+  retry_interval: 60
+  health_check_interval: 300
+  
+  # 策略监控
+  strategy_monitoring:
+    enabled: true
+    performance_tracking: true
+    alert_thresholds:
+      max_drawdown: 0.10  # 最大回撤超过10%时告警
+      min_win_rate: 0.30  # 胜率低于30%时告警
+
+# 风险控制配置
+risk_control:
+  # 全局风险控制
+  global:
+    max_total_signals_per_day: 50
+    max_total_exposure: 0.95  # 最大总仓位
+    emergency_stop_loss: 0.15  # 紧急止损阈值
+  
+  # 策略间风险控制
+  inter_strategy:
+    max_correlation: 0.8  # 策略间最大相关性
+    diversification_required: true

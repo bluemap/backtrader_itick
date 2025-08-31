@@ -73,6 +73,10 @@ class SignalGenerator:
         # 线程锁
         self.lock = threading.Lock()
         
+        # 多策略支持
+        self.strategy_type = None
+        self.strategy_params = None
+        
         self.logger.info("信号生成器初始化完成")
     
     def _load_signal_filter(self) -> SignalFilter:
@@ -500,6 +504,57 @@ class SignalGenerator:
             if hasattr(self.signal_filter, key):
                 setattr(self.signal_filter, key, value)
                 self.logger.info(f"更新过滤器配置: {key} = {value}")
+    
+    def generate_signals_for_symbol(self, symbol: str, klines: List[KlineData]) -> List[TradeSignal]:
+        """
+        为特定股票生成信号（多策略支持）
+        
+        Args:
+            symbol: 股票代码
+            klines: K线数据
+            
+        Returns:
+            List[TradeSignal]: 生成的信号列表
+        """
+        try:
+            if not klines or len(klines) < 20:
+                return []
+            
+            # 转换为pandas DataFrame
+            data_list = []
+            for kline in klines:
+                data_list.append({
+                    'timestamp': kline.timestamp,
+                    'open': kline.open,
+                    'high': kline.high,
+                    'low': kline.low,
+                    'close': kline.close,
+                    'volume': kline.volume
+                })
+            
+            df = pd.DataFrame(data_list)
+            df.set_index('timestamp', inplace=True)
+            
+            # 使用策略类型和参数创建策略
+            if self.strategy_type and self.strategy_params:
+                from ..strategies.simple_signal_generator import SimpleSignalGenerator
+                strategy = SimpleSignalGenerator(self.strategy_type, **self.strategy_params)
+                
+                # 生成信号
+                signals = strategy.generate_signals(df)
+                
+                # 设置股票代码
+                for signal in signals:
+                    signal.symbol = symbol
+                
+                return signals
+            else:
+                self.logger.warning(f"未设置策略类型和参数，无法为 {symbol} 生成信号")
+                return []
+            
+        except Exception as e:
+            self.logger.error(f"为 {symbol} 生成信号失败: {e}")
+            return []
 
 
 class RealTimeSignalGenerator:

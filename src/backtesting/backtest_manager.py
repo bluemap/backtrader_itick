@@ -36,6 +36,72 @@ class BacktestManager:
         self.results_dir = "backtest_results"
         os.makedirs(self.results_dir, exist_ok=True)
     
+    def run_backtest(self,
+                    symbol: str,
+                    strategy: str,
+                    days: int = 30,
+                    initial_cash: float = 100000,
+                    strategy_params: Dict[str, Any] = None,
+                    **kwargs) -> Dict[str, Any]:
+        """
+        运行回测（兼容多策略调用）
+        
+        Args:
+            symbol: 股票代码
+            strategy: 策略名称
+            days: 回测天数
+            initial_cash: 初始资金
+            strategy_params: 策略参数
+            **kwargs: 其他参数
+            
+        Returns:
+            Dict[str, Any]: 回测结果
+        """
+        try:
+            if strategy_params is None:
+                strategy_params = {}
+            
+            # 调用原有的回测方法
+            result = self.run_strategy_backtest(
+                symbol=symbol,
+                strategy_name=strategy,
+                days=days,
+                initial_cash=initial_cash,
+                **strategy_params
+            )
+            
+            if result:
+                # 计算最终总价值
+                final_value = result.final_cash + result.final_position_value
+                
+                # 转换为标准格式
+                return {
+                    "status": "success",
+                    "symbol": symbol,
+                    "strategy": strategy,
+                    "total_return_pct": result.total_return_pct,
+                    "total_trades": result.total_trades,
+                    "winning_trades": result.winning_trades,
+                    "win_rate": result.win_rate,
+                    "max_drawdown": result.max_drawdown_pct,
+                    "sharpe_ratio": result.sharpe_ratio or 0,
+                    "final_value": final_value,
+                    "initial_cash": result.initial_cash,
+                    "details": result
+                }
+            else:
+                return {
+                    "status": "error",
+                    "error": f"回测 {symbol} - {strategy} 失败"
+                }
+                
+        except Exception as e:
+            self.logger.error(f"回测失败: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
     def run_strategy_backtest(self,
                             symbol: str,
                             strategy_name: str,

@@ -24,6 +24,7 @@ class TradeSignal:
     confidence: float = 1.0  # 信号置信度 0-1
     volume: Optional[int] = None
     reason: str = ""  # 信号产生原因
+    strategy_name: str = ""  # 策略名称（多策略支持）
 
 
 class BaseStrategy(bt.Strategy):
@@ -68,7 +69,8 @@ class BaseStrategy(bt.Strategy):
         self.signal_callbacks.append(callback)
     
     def emit_signal(self, action: str, price: float, reason: str = "",
-                   confidence: float = 1.0, volume: Optional[int] = None) -> None:
+                   confidence: float = 1.0, volume: Optional[int] = None, 
+                   strategy_name: str = "") -> None:
         """
         发出交易信号
         
@@ -78,6 +80,7 @@ class BaseStrategy(bt.Strategy):
             reason: 信号原因
             confidence: 信号置信度
             volume: 交易量
+            strategy_name: 策略名称（多策略支持）
         """
         # 计算止损止盈
         if action == "BUY":
@@ -98,7 +101,8 @@ class BaseStrategy(bt.Strategy):
             strategy=self.__class__.__name__,
             confidence=confidence,
             volume=volume,
-            reason=reason
+            reason=reason,
+            strategy_name=strategy_name or self.__class__.__name__
         )
         
         # 更新统计

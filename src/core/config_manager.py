@@ -7,7 +7,7 @@
 import os
 import yaml
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 
 
@@ -33,6 +33,28 @@ class StrategyConfig:
     breakout: Optional[Dict[str, Any]] = None
     momentum: Optional[Dict[str, Any]] = None
     macd: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class MultiStrategyConfig:
+    """多策略配置"""
+    name: str
+    enabled: bool
+    type: str
+    stock_pool: Optional[Dict[str, Any]] = None
+    capital_allocation: Optional[Dict[str, Any]] = None
+    parameters: Optional[Dict[str, Any]] = None
+    risk_control: Optional[Dict[str, Any]] = None
+    notification: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class StrategyManagementConfig:
+    """策略管理配置"""
+    total_capital: float = 100000
+    execution_mode: str = "parallel"
+    conflict_resolution: Optional[Dict[str, Any]] = None
+    rebalancing: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -200,6 +222,83 @@ class ConfigManager:
             default_take_profit=risk_data.get('default_take_profit', 0.10)
         )
     
+    def get_multi_strategies_config(self) -> List[MultiStrategyConfig]:
+        """获取多策略配置列表"""
+        strategies_data = self.config_data.get('strategies', [])
+        strategies = []
+        
+        for strategy_data in strategies_data:
+            strategy = MultiStrategyConfig(
+                name=strategy_data.get('name', ''),
+                enabled=strategy_data.get('enabled', True),
+                type=strategy_data.get('type', ''),
+                stock_pool=strategy_data.get('stock_pool'),
+                capital_allocation=strategy_data.get('capital_allocation'),
+                parameters=strategy_data.get('parameters'),
+                risk_control=strategy_data.get('risk_control'),
+                notification=strategy_data.get('notification')
+            )
+            strategies.append(strategy)
+        
+        return strategies
+    
+    def get_strategy_management_config(self) -> StrategyManagementConfig:
+        """获取策略管理配置"""
+        management_data = self.config_data.get('strategy_management', {})
+        return StrategyManagementConfig(
+            total_capital=management_data.get('total_capital', 100000),
+            execution_mode=management_data.get('execution_mode', 'parallel'),
+            conflict_resolution=management_data.get('conflict_resolution'),
+            rebalancing=management_data.get('rebalancing')
+        )
+    
+    def get_global_stock_pool(self) -> Dict[str, Any]:
+        """获取全局股票池配置"""
+        return self.config_data.get('global_stock_pool', {})
+    
+    def is_multi_strategy_mode(self) -> bool:
+        """判断是否为多策略模式"""
+        return 'strategies' in self.config_data and len(self.config_data.get('strategies', [])) > 0
+    
+    def validate_multi_strategy_config(self) -> bool:
+        """验证多策略配置"""
+        try:
+            if not self.is_multi_strategy_mode():
+                return True  # 不是多策略模式，跳过验证
+            
+            strategies = self.get_multi_strategies_config()
+            if not strategies:
+                logging.error("多策略模式下必须至少配置一个策略")
+                return False
+            
+            # 验证每个策略配置
+            for strategy in strategies:
+                if not strategy.name:
+                    logging.error("策略名称不能为空")
+                    return False
+                
+                if not strategy.type:
+                    logging.error(f"策略 {strategy.name} 的类型不能为空")
+                    return False
+            
+            # 验证资金分配
+            management_config = self.get_strategy_management_config()
+            total_percentage = 0
+            
+            for strategy in strategies:
+                if strategy.enabled and strategy.capital_allocation:
+                    percentage = strategy.capital_allocation.get('percentage', 0)
+                    total_percentage += percentage
+            
+            if total_percentage > 100:
+                logging.warning(f"策略资金分配超过100%: {total_percentage}%")
+            
+            return True
+            
+        except Exception as e:
+            logging.error(f"多策略配置验证失败: {e}")
+            return False
+    
     def update_config(self, key: str, value: Any) -> None:
         """
         更新配置值
@@ -243,31 +342,49 @@ class ConfigManager:
         Returns:
             bool: 配置是否有效
         """
-        required_keys = [
-            'itick.api_key',
-            'stock_pool.symbols',
-            'strategy.type'
-        ]
-        
-        for key in required_keys:
-            if self.get_config(key) is None:
-                logging.error(f"缺少必需的配置项: {key}")
+        try:
+            # 验证 iTick 配置
+            itick_config = self.get_itick_config()
+            if not itick_config.api_key:
+                logging.error("iTick API Key 不能为空")
                 return False
-        
-        # 验证策略类型
-        valid_strategies = ['MA_Crossover', 'RSI_Strategy', 'BollingerBands', 'Breakout', 'Momentum', 
-                           'MACD_Crossover', 'MACD_Divergence', 'MACD_Trend']
-        strategy_type = self.get_config('strategy.type')
-        if strategy_type not in valid_strategies:
-            logging.error(f"无效的策略类型: {strategy_type}")
+            
+            # 判断是否为多策略模式
+            if self.is_multi_strategy_mode():
+                # 多策略模式验证
+                return self.validate_multi_strategy_config()
+            else:
+                # 单策略模式验证
+                required_keys = [
+                    'itick.api_key',
+                    'stock_pool.symbols',
+                    'strategy.type'
+                ]
+                
+                for key in required_keys:
+                    if self.get_config(key) is None:
+                        logging.error(f"缺少必需的配置项: {key}")
+                        return False
+                
+                # 验证策略类型
+                valid_strategies = ['MA_Crossover', 'RSI_Strategy', 'BollingerBands', 'Breakout', 'Momentum', 
+                                   'MACD_Crossover', 'MACD_Divergence', 'MACD_Trend']
+                strategy_type = self.get_config('strategy.type')
+                if strategy_type not in valid_strategies:
+                    logging.error(f"无效的策略类型: {strategy_type}")
+                    return False
+            
+            # 验证 iTick API Key
+            api_key = self.get_config('itick.api_key')
+            if not api_key or api_key == 'your_itick_api_key_here':
+                logging.warning("请设置有效的 iTick API Key")
+            
+            logging.info("配置验证通过")
+            return True
+            
+        except Exception as e:
+            logging.error(f"配置验证失败: {e}")
             return False
-        
-        # 验证 iTick API Key
-        api_key = self.get_config('itick.api_key')
-        if not api_key or api_key == 'your_itick_api_key_here':
-            logging.warning("请设置有效的 iTick API Key")
-        
-        return True
 
 
 # 全局配置管理器实例
