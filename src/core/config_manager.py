@@ -32,6 +32,7 @@ class StrategyConfig:
     bollinger_bands: Optional[Dict[str, Any]] = None
     breakout: Optional[Dict[str, Any]] = None
     momentum: Optional[Dict[str, Any]] = None
+    macd: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -153,7 +154,8 @@ class ConfigManager:
             rsi_strategy=strategy_data.get('rsi_strategy'),
             bollinger_bands=strategy_data.get('bollinger_bands'),
             breakout=strategy_data.get('breakout'),
-            momentum=strategy_data.get('momentum')
+            momentum=strategy_data.get('momentum'),
+            macd=strategy_data.get('macd')
         )
     
     def get_notification_config(self) -> NotificationConfig:
@@ -253,7 +255,8 @@ class ConfigManager:
                 return False
         
         # 验证策略类型
-        valid_strategies = ['MA_Crossover', 'RSI_Strategy', 'BollingerBands', 'Breakout', 'Momentum']
+        valid_strategies = ['MA_Crossover', 'RSI_Strategy', 'BollingerBands', 'Breakout', 'Momentum', 
+                           'MACD_Crossover', 'MACD_Divergence', 'MACD_Trend']
         strategy_type = self.get_config('strategy.type')
         if strategy_type not in valid_strategies:
             logging.error(f"无效的策略类型: {strategy_type}")

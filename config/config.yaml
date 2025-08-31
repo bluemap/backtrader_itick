@@ -29,8 +29,8 @@ stock_pool:
 
 # 策略配置
 strategy:
-  # 策略类型: MA_Crossover, RSI_Strategy, BollingerBands, Breakout, Momentum
-  type: "MA_Crossover"
+  # 策略类型: MA_Crossover, RSI_Strategy, BollingerBands, Breakout, Momentum, MACD_Crossover, MACD_Divergence, MACD_Trend
+  type: "BollingerBands"
   
   # 均线交叉策略参数
   ma_crossover:
@@ -56,6 +56,15 @@ strategy:
   momentum:
     period: 10
     threshold: 0.02
+    
+  # MACD策略参数
+  macd:
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+    volume_filter: true
+    trend_filter: true
+    histogram_threshold: 0.0
 
 # 数据配置
 data:

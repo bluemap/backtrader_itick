@@ -34,6 +34,11 @@ from .momentum_strategies import (
     RelativeStrengthMomentumStrategy,
     TrendFollowingMomentumStrategy
 )
+from .macd_strategies import (
+    MACDCrossoverStrategy,
+    MACDDivergenceStrategy,
+    MACDTrendStrategy
+)
 
 
 class StrategyFactory:
@@ -181,6 +186,11 @@ def register_all_strategies():
     StrategyFactory.register_strategy("Accelerated_Momentum", AcceleratedMomentumStrategy)
     StrategyFactory.register_strategy("RelativeStrength_Momentum", RelativeStrengthMomentumStrategy)
     StrategyFactory.register_strategy("TrendFollowing_Momentum", TrendFollowingMomentumStrategy)
+    
+    # MACD策略
+    StrategyFactory.register_strategy("MACD_Crossover", MACDCrossoverStrategy)
+    StrategyFactory.register_strategy("MACD_Divergence", MACDDivergenceStrategy)
+    StrategyFactory.register_strategy("MACD_Trend", MACDTrendStrategy)
 
 
 # 策略配置映射
@@ -200,7 +210,10 @@ STRATEGY_CONFIG_MAP = {
     "Momentum": "momentum",
     "Accelerated_Momentum": "momentum",
     "RelativeStrength_Momentum": "momentum",
-    "TrendFollowing_Momentum": "momentum"
+    "TrendFollowing_Momentum": "momentum",
+    "MACD_Crossover": "macd",
+    "MACD_Divergence": "macd",
+    "MACD_Trend": "macd"
 }
 
 
@@ -296,7 +309,10 @@ STRATEGY_DESCRIPTIONS = {
     "Momentum": "价格动量策略，跟随强势动量",
     "Accelerated_Momentum": "加速动量策略，寻找动量加速的机会",
     "RelativeStrength_Momentum": "相对强度动量策略",
-    "TrendFollowing_Momentum": "趋势跟随动量策略，结合ADX确认趋势强度"
+    "TrendFollowing_Momentum": "趋势跟随动量策略，结合ADX确认趋势强度",
+    "MACD_Crossover": "MACD交叉策略，基于MACD线与信号线的交叉信号",
+    "MACD_Divergence": "MACD背离策略，寻找价格与MACD的背离信号",
+    "MACD_Trend": "MACD趋势策略，结合长期趋势的MACD信号"
 }
 
 

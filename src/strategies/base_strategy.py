@@ -47,8 +47,8 @@ class BaseStrategy(bt.Strategy):
         # 当前持仓状态
         self.position_status = {}
         
-        # 策略统计
-        self.stats = {
+        # 策略统计（重命名避免与Backtrader内置stats冲突）
+        self.strategy_stats = {
             'total_signals': 0,
             'buy_signals': 0,
             'sell_signals': 0,
@@ -102,12 +102,12 @@ class BaseStrategy(bt.Strategy):
         )
         
         # 更新统计
-        self.stats['total_signals'] += 1
+        self.strategy_stats['total_signals'] += 1
         if action == "BUY":
-            self.stats['buy_signals'] += 1
+            self.strategy_stats['buy_signals'] += 1
         else:
-            self.stats['sell_signals'] += 1
-        self.stats['last_signal_time'] = signal.timestamp
+            self.strategy_stats['sell_signals'] += 1
+        self.strategy_stats['last_signal_time'] = signal.timestamp
         
         # 调用回调函数
         for callback in self.signal_callbacks:
@@ -179,7 +179,7 @@ class BaseStrategy(bt.Strategy):
     
     def get_stats(self) -> Dict[str, Any]:
         """获取策略统计信息"""
-        return self.stats.copy()
+        return self.strategy_stats.copy()
 
 
 class DataFeed(bt.feeds.PandasData):
